@@ -11,6 +11,7 @@
 
 -l"C:\ti\mmwave_sdk_03_05_00_04\packages\ti\utils\sbl\mss_configPkg_xwr68xx\package\cfg\sbl_per4ft.oer4ft"
 -l"C:\ti\mmwave_sdk_03_05_00_04\packages\ti\utils\sbl\mss_configPkg_xwr68xx\package\cfg\sbl_per4ft.src\sysbios\sysbios.aer4ft"
+-l"C:\ti\mmwave_sdk_03_05_00_04\packages\ti\drivers\canfd\lib\libcanfd_xwr68xx.aer4f"
 -l"C:\ti\bios_6_73_01_01\packages\ti\targets\arm\rtsarm\lib\boot.aer4ft"
 -l"C:\ti\bios_6_73_01_01\packages\ti\targets\arm\rtsarm\lib\auto_init.aer4ft"
 

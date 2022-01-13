@@ -126,7 +126,7 @@ extern "C" {
  * @brief   Number of seconds the SBL will wait before autobooting the existing image.
  *          This allows the user to press a key to stop the autoboot and flash a new image.
  */
-#define SBL_AUTOBOOT_COUNT                  20U
+#define SBL_AUTOBOOT_COUNT                  10U
 
 /**
  * @brief   ASCII code of CR and Space key. Press CR or Space to stop autoboot.
@@ -149,6 +149,7 @@ extern "C" {
  * @brief   This is the backup default image offset.
  * Note: SBL only reads from this location. It does not modify the factory default backup image.
  */
+#define SBL_METAIMAGE_OFFSET_0              0x00080000U
 #define SBL_BACKUP_IMAGE_OFFSET             0x00100000U
 //#define SBL_BACKUP_IMAGE_OFFSET             0x00180000U
 /** @}*/

@@ -37,3 +37,11 @@ obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/utils/sbl/
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/utils/sbl/include/sbl_error.h
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/utils/sbl/include/transport.h
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/utils/sbl/include/crc16.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/canfd/canfd.h
+obj_xwr68xx/transport.oer4f: C:/ti/ti-cgt-arm_16.9.6.LTS/include/stddef.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/canfd/include/hw_mcanss.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/pinmux/pinmux.h
+obj_xwr68xx/transport.oer4f: C:/ti/ti-cgt-arm_16.9.6.LTS/include/stddef.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/pinmux/include/pinmux_xwr68xx.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/soc/include/reg_toprcm.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/soc/include/reg_toprcm_xwr16xx.h
