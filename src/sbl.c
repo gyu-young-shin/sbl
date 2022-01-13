@@ -89,7 +89,8 @@ extern uint8_t      _appVecs[SBL_VECTOR_TABLE_SIZE];
 
 extern void SBL_mpuConfigDefault(void);
 extern void SBL_platformInit(void);
-
+extern int32_t SBL_transportWrite_CAN_FD(void);
+extern uint8_t select_mode;
 /**************************************************************************
  *************************** Global Variables *****************************
  **************************************************************************/
@@ -104,6 +105,8 @@ SBL_MCB             gSblMCB;
  *************************** Local Definitions ****************************
  **************************************************************************/
 static void inline SBL_switchBuffer();
+
+
 
 /**************************************************************************
  *************************** Function Definitions *************************
@@ -430,9 +433,10 @@ void SBL_initTask(UArg arg0, UArg arg1)
     SPIFLASH_devID      devId;
     uint8_t             userInput = 0;
     uint8_t             autoboot = SBL_AUTOBOOT_COUNT;
-    uint32_t            metaimageUpdate = 0;
+
     QSPI_Params         QSPIParams;
     QSPIFlash_Handle    qspiFlashHandle = NULL;
+  
 
     /* Initialize transport peripheral */
     SBL_transportInit();
@@ -446,6 +450,11 @@ void SBL_initTask(UArg arg0, UArg arg1)
         DebugP_assert(0);
     }
 
+    retVal = SBL_transportWrite_CAN_FD();
+    if (retVal != 0)
+    {
+        DebugP_assert(0);
+    }
     SBL_printf ("\r\n");
     SBL_printf ("**********************************************\r\n");
     SBL_printf ("Debug: Secondary Bootloader Application Start \r\n");
@@ -470,7 +479,8 @@ void SBL_initTask(UArg arg0, UArg arg1)
         /* Check if user interrupted the autoboot */
         if (retVal == 1U)
         {
-            metaimageUpdate = 1;
+            //metaimageUpdate = 1;
+            select_mode  =2 ;
             SBL_printf ("\r\nDebug: Update Meta Image selected\r\n");
         }
         else
@@ -479,61 +489,28 @@ void SBL_initTask(UArg arg0, UArg arg1)
             continue;
         }
     }while((retVal == 0) && (autoboot != 0));
-
     SBL_printf ("\r\n");
-
     /* Initialize the QSPI Driver */
     QSPI_init();
-
     /* Initialize the QSPI Flash */
     QSPIFlash_init();
-
     /* Open QSPI driver */
     QSPI_Params_init(&QSPIParams);
-
     QSPIParams.clkMode = QSPI_CLOCK_MODE_0;
-
-#ifdef SOC_XWR68XX
-    /* Select 240MHz as QSPI input clock, and divide by 3 */
-    if(SOC_setPeripheralClock(gSblMCB.socHandle, SOC_MODULE_QSPI, SOC_CLKSOURCE_240MPLL, 2U, &retVal) < 0 )
-    {
-        /* Debug Message: */
-        DebugP_assert(0);
-    }
-
-    /* Set the QSPI peripheral clock to 80MHz  */
-    QSPIParams.qspiClk = 80 * 1000000U;
-
-     /* QSPI bit clock rate derives from QSPI peripheral clock(qspiClk)
-       and divide clock internally down to bit clock rate
-       BitClockRate = qspiClk/divisor(=5, setup by QSPI driver internally)
-     */
-
-    /* Running at 80MHz QSPI bit rate */
-    QSPIParams.bitRate = 80 * 1000000U;
-	
-#else
-
     /* Set the QSPI peripheral clock  */
     QSPIParams.qspiClk = SOC_getMSSVCLKFrequency(gSblMCB.socHandle, &retVal);
-
     /* Running at 40MHz QSPI bit rate
      * QSPI bit clock rate derives from QSPI peripheral clock(qspiClk)
      and divide clock internally down to bit clock rate
      BitClockRate = qspiClk/divisor(setup by QSPI driver internally)
      */
     QSPIParams.bitRate = 40 * 1000000U;
-
-#endif
-
     gSblMCB.qspiHandle = QSPI_open(&QSPIParams, &retVal);
-
     if (gSblMCB.qspiHandle == NULL)
     {
         SBL_printf("Error: QSPI_open failed [Error code %d]\r\n", retVal);
         DebugP_assert(0);
     }
-
     /* Open the QSPI Instance */
     qspiFlashHandle = QSPIFlash_open(gSblMCB.qspiHandle, &retVal);
     if (qspiFlashHandle == NULL)
@@ -541,47 +518,41 @@ void SBL_initTask(UArg arg0, UArg arg1)
         SBL_printf("Error: QSPIFlash Open API failed.\r\n");
         DebugP_assert(0);
     }
-
     /* Get SPI Flash id */
     QSPIFlash_getDeviceID(qspiFlashHandle, &devId);
-
     /* get the flash address */
     flashAddr = QSPIFlash_getExtFlashAddr(qspiFlashHandle);
-
-    SBL_printf("Debug: Device info: Manufacturer: %x, Device type = %x, Capacity = %x\r\n",
-                    devId.Manufacture, devId.device, devId.capacity);
-
-    SBL_printf("\r\nDebug: Loading application metaImage from Flash address: %x\r\n",
-                    (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET));
-
+    SBL_printf("Debug: Device info: Manufacturer: %x, Device type = %x, Capacity = %x\r\n", devId.Manufacture, devId.device, devId.capacity);
     /*  Update the metaimage in the Sflash using choosen device peripheral. */
-    if(metaimageUpdate == 1)
+    // if(metaimageUpdate == 1)
+    // {
+    //      retVal = SBL_imageFlasher(qspiFlashHandle, (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET));
+    //     // if(retVal != 0)
+    //     // {
+    //     //     SBL_printf("\r\nError: Could not download the image to Flash. Resetting the board to retry\r\n");
+    //     //     /* Reset the MSS core */
+    //     //     SOC_softReset(gSblMCB.socHandle, &retVal);
+    //     // }
+    // }
+    /* Download the metaimage present in the SFLASH into the RAM */
+    if( select_mode == 2 )
     {
-        retVal = SBL_imageFlasher(qspiFlashHandle, (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET));
+        SBL_printf("\r\nDebug: Loading application metaImage from Flash address: %x\r\n", (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET_0));
+        retVal = SBL_imageLoader(qspiFlashHandle, (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET_0));
         if(retVal != 0)
         {
-            SBL_printf("\r\nError: Could not download the image to Flash. Resetting the board to retry\r\n");
-
+            SBL_printf("\r\nError: Could not download the backup factory default image metaimage to RAM. Resetting the board to retry\r\n");
             /* Reset the MSS core */
             SOC_softReset(gSblMCB.socHandle, &retVal);
         }
     }
-
-    /* Download the metaimage present in the SFLASH into the RAM */
-    retVal = SBL_imageLoader(qspiFlashHandle, (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET));
-
-    if(retVal != 0)
+    else
     {
-        SBL_printf("\r\nError: Could not download the metaimage to RAM. Trying to boot the backup factory default image.\r\n");
-        SBL_printf("\r\nDebug: Loading backup factory default image from Flash address: %x\r\n",
-                       (flashAddr + (uint32_t)SBL_BACKUP_IMAGE_OFFSET));
-
-        /* Error loading image. Fall back to factory default image */
+        SBL_printf("\r\nDebug: Loading application metaImage from Flash address: %x\r\n", (flashAddr + (uint32_t)SBL_BACKUP_IMAGE_OFFSET));
         retVal = SBL_imageLoader(qspiFlashHandle, (flashAddr + (uint32_t)SBL_BACKUP_IMAGE_OFFSET));
         if(retVal != 0)
         {
             SBL_printf("\r\nError: Could not download the backup factory default image metaimage to RAM. Resetting the board to retry\r\n");
-
             /* Reset the MSS core */
             SOC_softReset(gSblMCB.socHandle, &retVal);
         }
@@ -593,19 +564,14 @@ void SBL_initTask(UArg arg0, UArg arg1)
 	    QSPIFlash_close(qspiFlashHandle);
 		QSPI_close(gSblMCB.qspiHandle);
         SBL_transportDeinit();
-
         /* Disable interrupts before copying IVT. */
         HwiP_disable();
-
         /* Copy the interrupt vector table. */
 		memcpy((void*)&_appVecs[0], (void*)&gSblMCB.sblIntVecTable, SBL_VECTOR_TABLE_SIZE);
     }
-
     /* Reset the MSS core */
     SOC_softReset(gSblMCB.socHandle, &retVal);
-
     BIOS_exit(0);
-
     return;
 }
 
@@ -647,7 +613,12 @@ void SBL_init(void)
     /* Initialize the SOC Module: The default MPU configuration is bypassed. */
     gSblMCB.socHandle = SOC_init (&socCfg, &errCode);
 
-    DebugP_assert (gSblMCB.socHandle != NULL);
+     DebugP_assert (gSblMCB.socHandle != NULL);
+
+      /* Configure the divide value for MCAN source clock */
+    SOC_setPeripheralClock(gSblMCB.socHandle, SOC_MODULE_MCAN, SOC_CLKSOURCE_VCLK, 4U, &errCode);  //4U 200MHz,  2U 120MHz, 0U 40MHz
+
+   
 
     /* Configure the MPU for MSS regions, DSS regions and peripherals after calling SOC init.
      * BSS regions will be configured when BSS image is downloaded.
