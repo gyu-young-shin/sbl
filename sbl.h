@@ -126,7 +126,7 @@ extern "C" {
  * @brief   Number of seconds the SBL will wait before autobooting the existing image.
  *          This allows the user to press a key to stop the autoboot and flash a new image.
  */
-#define SBL_AUTOBOOT_COUNT                  10U
+#define SBL_AUTOBOOT_COUNT                  6U
 
 /**
  * @brief   ASCII code of CR and Space key. Press CR or Space to stop autoboot.
@@ -143,7 +143,7 @@ extern "C" {
  * @brief   This is the maximum size of the application metaimage which the SBL will attempt to flash.
  *          This define protects against erraneously overwriting the backup default image.
  */
-#define SBL_MAX_METAIMAGE_SIZE              (512U * 1024U)
+#define SBL_MAX_METAIMAGE_SIZE              (1024U * 1024U)
 
 /**
  * @brief   This is the backup default image offset.

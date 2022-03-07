@@ -45,3 +45,8 @@ obj_xwr68xx/transport.oer4f: C:/ti/ti-cgt-arm_16.9.6.LTS/include/stddef.h
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/pinmux/include/pinmux_xwr68xx.h
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/soc/include/reg_toprcm.h
 obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/soc/include/reg_toprcm_xwr16xx.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/gpio/gpio.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/gpio/include/gpio_xwr68xx.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/gpio/include/gpio_internal.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/gpio/gpio.h
+obj_xwr68xx/transport.oer4f: C:/ti/mmwave_sdk_03_05_00_04/packages/ti/drivers/gpio/include/reg_gio.h

@@ -53,12 +53,13 @@
 /* CRC16 include file. */
 #include <ti/utils/sbl/include/crc16.h>
 
+
 #include <ti/drivers/canfd/canfd.h>
 #include <ti/drivers/pinmux/pinmux.h>
 #include <ti/drivers/soc/include/reg_toprcm.h>
 #include <ti/drivers/soc/soc.h>
 #include <include/transport.h>
-
+#include <ti/drivers/gpio/gpio.h>
 /**************************************************************************
  ************************** Local Definitions *****************************
  **************************************************************************/
@@ -95,7 +96,7 @@ static int32_t SBL_verifyCRC(uint8_t *dataBuffer, uint32_t dataLength, uint32_t 
 static void SBL_discardInput(void);
 
 uint8_t select_mode = 0;
-// int32_t SBL_transportWrite_CAN_FD(void);
+
 
 typedef enum MmwDemo_output_message_type_e
 {
@@ -152,10 +153,13 @@ CANFD_MCANBitTimingParams mcanBitTimingParams;
 CANFD_MsgObjHandle txMsgObjHandle;
 CANFD_MsgObjHandle rxMsgObj2Handle;
 CANFD_MsgObjHandle rxMsgObj3Handle;
+CANFD_MsgObjHandle rxMsgObj4Handle;
 CANFD_MCANMsgObjCfgParams txMsgObjectParams;
 CANFD_MCANMsgObjCfgParams rxMsgObject2Params;
 CANFD_MCANMsgObjCfgParams rxMsgObject3Params;
+
 CANFD_MCANFrameType frameType = CANFD_MCANFrameType_FD;
+CANFD_MCANRxMsgObjRangeCfgParams rxRangeMsgObjectParams;
 
 uint8_t can_txData[64U];
 uint8_t rxData[64U];
@@ -164,7 +168,7 @@ uint8_t rxData[64U];
 uint8_t candataBuff[BUFFER_LENGTH];
 
 volatile uint32_t gLastMsgFlag = 0;
-volatile uint32_t gRxPkts = 0, gErrStatusInt = 0, gPktsWrt = 0;
+volatile int32_t gRxPkts = 0, gErrStatusInt = 0, gPktsWrt = 0;
 uint32_t rxDataLength;
 
 static void sblErrStatusCallback(CANFD_Handle handle, CANFD_Reason reason,
@@ -174,6 +178,7 @@ static void sblErrStatusCallback(CANFD_Handle handle, CANFD_Reason reason,
 
     return;
 }
+uint8_t CAN_READ_Mode = 0;
 /* Registered callback function to receive data. */
 static void sblDataCallback(CANFD_MsgObjHandle handle, CANFD_Reason reason)
 {
@@ -181,29 +186,61 @@ static void sblDataCallback(CANFD_MsgObjHandle handle, CANFD_Reason reason)
     uint32_t id;
     CANFD_MCANFrameType rxFrameType;
     CANFD_MCANXidType rxIdType;
-
-    uint32_t buffOffset = (gRxPkts % NUM_PKT_IN_BUFF);
     if (reason == CANFD_Reason_RX)
     {
-        retVal = CANFD_getData(handle, &id, &rxFrameType, &rxIdType, &rxDataLength, &rxData[0], &errCode);
+         if(CAN_READ_Mode ==0)
+        {
+        //retVal = CANFD_getData(handle, &id, &rxFrameType, &rxIdType, &rxDataLength, &rxData[0], &errCode);
+            retVal = CANFD_getData(handle, &id, &rxFrameType, &rxIdType, &rxDataLength, &rxData[0], &errCode);
+            if (retVal < 0)
+            {
+                SBL_printf("Error: CAN receive data failed [Error code %d]\n", errCode);
+                return;
+            }
 
-        if (retVal < 0)
-        {
-            SBL_printf("Error: CAN receive data failed [Error code %d]\n", errCode);
-            return;
-        }
-        if (rxData[0] == 0x01 && rxData[1] == 0x01 && rxData[2] == 0x01) // sensor init ( reset )
-        {
-            select_mode = rxData[3];
-            SBL_printf(" Mode : %d \n", select_mode);
+            if(rxData[0]== 0x10 && rxData[1]== 0x20 && rxData[2]== 0xFF)
+            {
+                select_mode = rxData[3];
+            }
+            if(rxData[0] == 0x10 && rxData[1]== 0x11 && rxData[2]==0x01 )  //sensor init ( reset )
+            {
+                // MmwDemo_reset();
+                select_mode = 0;
+                SOC_softReset(gSblMCB.socHandle, &retVal);
+            }
+            if(rxData[0]== 0x10 && rxData[1]== 0x30 && rxData[2]== 0xFF)
+            {
+                CAN_READ_Mode =2;
+                rxDataLength= 0;
+                gRxPkts =-1;
+            }
+       
         }
 
-        /* Message ID for terminate message? */
-        if (id == SBL_CANFD_TERMINATE_MSG_ID)
+        
+        if(CAN_READ_Mode ==2)
         {
-            gLastMsgFlag = 1;
+        //retVal = CANFD_getData(handle, &id, &rxFrameType, &rxIdType, &rxDataLength, &rxData[0], &errCode);
+            retVal = CANFD_getData(handle, &id, &rxFrameType, &rxIdType, &rxDataLength, &candataBuff[(gRxPkts % NUM_PKT_IN_BUFF)*64], &errCode);
+            if (retVal < 0)
+            {
+                SBL_printf("Error: CAN receive data failed [Error code %d]\n", errCode);
+                return;
+            }
+            if(candataBuff[0] == 0x10 && candataBuff[1]== 0x11 && candataBuff[2]==0x01 )  //sensor init ( reset )
+            {
+                // MmwDemo_reset();
+                SOC_softReset(gSblMCB.socHandle, &retVal);
+            }
+
+            if (id == SBL_CANFD_TERMINATE_MSG_ID)
+            {
+                gLastMsgFlag = 1;
+                SBL_printf(" gLastMsgFlag : %d \n", gLastMsgFlag);
+            }
+            gRxPkts++;   
         }
-        gRxPkts++;
+        
     }
     return;
 }
@@ -246,16 +283,16 @@ static void MCANParamInit(void)
     mcanCfgParams->msgRAMConfig.txBufMode = 0U;
     mcanCfgParams->msgRAMConfig.txEventFIFOSize = 0U;
     mcanCfgParams->msgRAMConfig.txEventFIFOWaterMark = 0U;
-    mcanCfgParams->msgRAMConfig.rxFIFO0size = 0U;
-    mcanCfgParams->msgRAMConfig.rxFIFO0OpMode = 0U;
+    mcanCfgParams->msgRAMConfig.rxFIFO0size =      0U;
+    mcanCfgParams->msgRAMConfig.rxFIFO0OpMode =    0U;
     mcanCfgParams->msgRAMConfig.rxFIFO0waterMark = 0U;
-    mcanCfgParams->msgRAMConfig.rxFIFO1size = 64U;
-    mcanCfgParams->msgRAMConfig.rxFIFO1waterMark = 64U;
-    mcanCfgParams->msgRAMConfig.rxFIFO1OpMode = 64U;
-    mcanCfgParams->eccConfig.enable = 1;
-    mcanCfgParams->eccConfig.enableChk = 1;
+    mcanCfgParams->msgRAMConfig.rxFIFO1size =      0U;
+    mcanCfgParams->msgRAMConfig.rxFIFO1waterMark = 0U;
+    mcanCfgParams->msgRAMConfig.rxFIFO1OpMode =    0U;
+    mcanCfgParams->eccConfig.enable =        1;
+    mcanCfgParams->eccConfig.enableChk =     1;
     mcanCfgParams->eccConfig.enableRdModWr = 1;
-    mcanCfgParams->errInterruptEnable = 1U;
+    mcanCfgParams->errInterruptEnable = 0U;
     mcanCfgParams->dataInterruptEnable = 1U;
     mcanCfgParams->appErrCallBack = sblErrStatusCallback;
     mcanCfgParams->appDataCallBack = sblDataCallback;
@@ -266,10 +303,8 @@ static void MCANParamInit(void)
     // Pinmux_Set_OverrideCtrl(SOC_XWR68XX_PIND13_PADAD,PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
     // Pinmux_Set_FuncSel(SOC_XWR68XX_PIND13_PADAD,SOC_XWR68XX_PIND13_PADAD_CANFD_RX);
 
-    Pinmux_Set_OverrideCtrl(SOC_XWR68XX_PINE14_PADAE, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
-    Pinmux_Set_FuncSel(SOC_XWR68XX_PINE14_PADAE, SOC_XWR68XX_PINE14_PADAE_CANFD_TX);
-    Pinmux_Set_OverrideCtrl(SOC_XWR68XX_PIND13_PADAD, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
-    Pinmux_Set_FuncSel(SOC_XWR68XX_PIND13_PADAD, SOC_XWR68XX_PIND13_PADAD_CANFD_RX);
+
+//    CSL_FINSR(0x43201450, 22, 22, 0x1U);
     /* Initialize the CANFD driver. */
     canHandle = CANFD_init(0, mcanCfgParams, &errCode);
     if (canHandle == NULL)
@@ -277,7 +312,7 @@ static void MCANParamInit(void)
         SBL_printf("Error: CANFD Module Initialization failed [Error code %d]\n", errCode);
         return;
     }
-    /*500Kbps NomBitRate: (40)/(((6+5+4)+1)*5)*/
+    //? /*500Kbps NomBitRate: (40)/(((6+5+4)+1)*5)*/
     mcanBitTimingParams.nomBrp = 0x5U;
     mcanBitTimingParams.nomPropSeg = 0x6U;
     mcanBitTimingParams.nomPseg1 = 0x5U;
@@ -290,7 +325,7 @@ static void MCANParamInit(void)
     // mcanBitTimingParams.nomPseg2 = 0x5U;
     // mcanBitTimingParams.nomSjw = 0x1U;
 
-    //// Nominal Bit rate = (40)/(((3+4+2)+1)*1) = 4Mhz
+    //? // Nominal Bit rate = (40)/(((3+4+2)+1)*1) = 4Mhz
     mcanBitTimingParams.dataBrp = 0x1U;
     mcanBitTimingParams.dataPropSeg = 0x3U;
     mcanBitTimingParams.dataPseg1 = 0x4U;
@@ -328,7 +363,7 @@ static void MCANParamInit(void)
     /* Setup the receive message object for receiving data packets. */
     rxMsgObject2Params.direction = CANFD_Direction_RX;
     rxMsgObject2Params.msgIdType = CANFD_MCANXidType_29_BIT;
-    rxMsgObject2Params.msgIdentifier = SBL_CANFD_DATA_MSG_ID;
+    rxMsgObject2Params.msgIdentifier = SBL_CANFD_TERMINATE_MSG_ID;
     rxMsgObj2Handle = CANFD_createMsgObject(canHandle, &rxMsgObject2Params, &errCode);
     if (rxMsgObj2Handle == NULL)
     {
@@ -345,6 +380,19 @@ static void MCANParamInit(void)
         SBL_printf("Error: CANFD create Rx message object failed [Error code %d]\n", errCode);
         return;
     }
+
+    // rxRangeMsgObjectParams.msgIdType = CANFD_MCANXidType_29_BIT;
+    // rxRangeMsgObjectParams.startMsgIdentifier = 0xA0;
+    // rxRangeMsgObjectParams.endMsgIdentifier = 0xA5;
+
+    // rxMsgObj4Handle = CANFD_createRxRangeMsgObject(canHandle, &rxRangeMsgObjectParams, &errCode);
+    // if (rxMsgObj4Handle == NULL)
+    //    {
+    //        SBL_printf(
+    //                "Error: CANFD create range Rx message object failed [Error code %d]\n",
+    //                errCode);
+    //        return;
+    //    }
 }
 
 int32_t Can_Transmit_Schedule(uint32_t msg_id, uint8_t *txmsg, uint32_t len)
@@ -533,9 +581,17 @@ static void SBL_discardInput(void)
 void SBL_transportInit(void)
 {
 
-    MCANParamInit();
+
+    GPIO_init();
+    GPIO_setConfig (SOC_XWR68XX_GPIO_1, GPIO_CFG_OUTPUT);
+    GPIO_setConfig (SOC_XWR68XX_GPIO_2, GPIO_CFG_OUTPUT);
+
+    GPIO_write (SOC_XWR68XX_GPIO_2, 1U);
+    GPIO_write (SOC_XWR68XX_GPIO_1, 1U);
     /* Initialize the UART */
     UART_init();
+
+    MCANParamInit();
 }
 
 /*!
@@ -625,20 +681,15 @@ int32_t SBL_transportRead(uint8_t *buffer, uint32_t size)
  *  @retval
  *      Not Applicable.
  */
-int32_t SBL_transportWrite_CAN_FD(void)
+int32_t SBL_transportWrite_CAN_FD(uint8_t cnt)
 {
     int32_t retVal = 0;
-    int32_t i = 0;
     txMsgObjectParams.msgIdentifier = Get_CanMessageIdentifier((MmwDemo_output_message_type)CAN_MESSAGE_MMWDEMO_MAX);
-    for (i = 0; i < 10; i++)
-    {
-        can_txData[0] = 0xAA;
-        can_txData[1] = 0x00; // ROA_Sensor_Status
-        can_txData[2] = 0x00;
-        can_txData[3] = 0x00;
-        Can_Transmit_Schedule(txMsgObjectParams.msgIdentifier, (uint8_t *)&can_txData, 5);
-    }
-
+    can_txData[0] = 0x01;
+    can_txData[1] = cnt; // ROA_Sensor_Status
+    can_txData[2] = 0x00;
+    can_txData[3] = 0x00;
+    Can_Transmit_Schedule(txMsgObjectParams.msgIdentifier, (uint8_t *)&can_txData, 5);
     return retVal;
 }
 
@@ -720,12 +771,13 @@ int32_t SBL_transportDownloadFile(QSPIFlash_Handle qspiFlashHandle, uint32_t fla
     uint8_t packetId = 1;
     uint8_t *ptrData;
 
-    SBL_printf("Debug: Start the image download using XMODEM over UART\r\n");
+    SBL_printf("Debug: Start the image download using XMODEM over UART or CANFD\r\n");
 
     /* Initiate the transfer by requesting the transmission with CRC. */
     optionCRC = 'C';
     computeCRC = 1;
-
+    //gLastMsgFlag =0;
+    select_mode = 0;
     while (1)
     {
         for (index = 0; index < SBL_XMODEM_MAX_WAIT; index++)
@@ -734,9 +786,16 @@ int32_t SBL_transportDownloadFile(QSPIFlash_Handle qspiFlashHandle, uint32_t fla
             if (optionCRC)
             {
                 UART_writePolling(gSblMCB.uartHandle, &optionCRC, 1U);
+                SBL_transportWrite_CAN_FD(optionCRC);
+    
+            }
+            if(select_mode == 3)
+            {
+                rxData = SBL_CAN_RECV;
+                retVal =1;
+                break;
             }
             retVal = UART_read(gSblMCB.uartHandle, (uint8_t *)&rxData, 1U);
-
             /* Check if 1 byte was read? */
             if (retVal != 1U)
             {
@@ -745,7 +804,9 @@ int32_t SBL_transportDownloadFile(QSPIFlash_Handle qspiFlashHandle, uint32_t fla
             else
             {
                 break;
-            }
+            }   
+        
+
         }
         if (retVal == 1)
         {
@@ -801,6 +862,34 @@ int32_t SBL_transportDownloadFile(QSPIFlash_Handle qspiFlashHandle, uint32_t fla
                 }
                 break;
             }
+                 case SBL_CAN_RECV:
+                {
+            
+                    uint32_t totDataLen = 0;
+                    SBL_printf("Now is CAN_FD Dowmloding\r\n");
+                    gLastMsgFlag =0;
+                    while (1)
+                    {
+                    /* Wait till a new data packet is received. */
+                        while (gPktsWrt == gRxPkts);
+                        /* Check if the terminate Message Id is received? */
+                        if (gLastMsgFlag != 0)
+                        {
+                            break;
+                        }
+                        QSPIFlash_singleWrite(qspiFlashHandle, flashAddr, 64,(uint8_t*)&candataBuff[(gPktsWrt%NUM_PKT_IN_BUFF)*64]);
+                        /* Increment the Flash pointer. */
+                        flashAddr = flashAddr + 64;
+                        /* Increment the number of packets written. */
+                        gPktsWrt++;
+                        totDataLen = totDataLen + 64;
+                        
+                    }
+                    dataLength = totDataLen;
+                    SBL_printf("flash add : %x ,length = %d\r\n", flashAddr , totDataLen);
+                    goto exitGetFile;
+                    
+                }
             default:
             {
                 printf("Debug: Unsupported character received\n");

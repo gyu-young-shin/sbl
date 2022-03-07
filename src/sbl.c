@@ -64,6 +64,7 @@
 #include <ti/sysbios/knl/Event.h>
 #include <ti/sysbios/family/arm/v7a/Pmu.h>
 
+
 /* MMWSDK include files */
 #include <ti/common/sys_common.h>
 #include <ti/drivers/dma/dma.h>
@@ -76,7 +77,7 @@
 /**************************************************************************
  ************************** Local Definitions *****************************
  **************************************************************************/
-#define SBL_ERASE_SIZE_KB               512U
+#define SBL_ERASE_SIZE_KB               1024U
 #define SBL_PING_BUFFER_SIZE            2048U
 #define SBL_BUFFER_LENGTH               (SBL_PING_BUFFER_SIZE * 2U)
 
@@ -89,7 +90,8 @@ extern uint8_t      _appVecs[SBL_VECTOR_TABLE_SIZE];
 
 extern void SBL_mpuConfigDefault(void);
 extern void SBL_platformInit(void);
-extern int32_t SBL_transportWrite_CAN_FD(void);
+extern int32_t SBL_transportWrite_CAN_FD(uint8_t cnt);
+
 extern uint8_t select_mode;
 /**************************************************************************
  *************************** Global Variables *****************************
@@ -436,7 +438,10 @@ void SBL_initTask(UArg arg0, UArg arg1)
 
     QSPI_Params         QSPIParams;
     QSPIFlash_Handle    qspiFlashHandle = NULL;
-  
+          /* Test the GPIO Input: Configure pin J13 as GPIO_1 input */
+
+
+
 
     /* Initialize transport peripheral */
     SBL_transportInit();
@@ -450,15 +455,15 @@ void SBL_initTask(UArg arg0, UArg arg1)
         DebugP_assert(0);
     }
 
-    retVal = SBL_transportWrite_CAN_FD();
-    if (retVal != 0)
-    {
-        DebugP_assert(0);
-    }
+    // retVal = SBL_transportWrite_CAN_FD();
+    // if (retVal != 0)
+    // {
+    //     DebugP_assert(0);
+    // }
     SBL_printf ("\r\n");
-    SBL_printf ("**********************************************\r\n");
-    SBL_printf ("Debug: Secondary Bootloader Application Start \r\n");
-    SBL_printf ("**********************************************\r\n");
+    SBL_printf ("**********************\r\n");
+    SBL_printf ("    AU..SBL Start     \r\n");
+    SBL_printf ("**********************\r\n");
 
     SBL_printf ("Press CR key or Space key to stop auto boot and Update Meta Image...\r\n");
     SBL_printf ("Loading existing Meta Image from Flash in ");
@@ -480,12 +485,17 @@ void SBL_initTask(UArg arg0, UArg arg1)
         if (retVal == 1U)
         {
             //metaimageUpdate = 1;
-            select_mode  =2 ;
+            select_mode  =3 ;
             SBL_printf ("\r\nDebug: Update Meta Image selected\r\n");
         }
         else
         {
-            SBL_printf ("  %d", autoboot--);
+            SBL_printf ("  %d \n", autoboot--);
+            retVal = SBL_transportWrite_CAN_FD(autoboot);
+            if (retVal != 0)
+            {
+                DebugP_assert(0);
+            }
             continue;
         }
     }while((retVal == 0) && (autoboot != 0));
@@ -524,16 +534,16 @@ void SBL_initTask(UArg arg0, UArg arg1)
     flashAddr = QSPIFlash_getExtFlashAddr(qspiFlashHandle);
     SBL_printf("Debug: Device info: Manufacturer: %x, Device type = %x, Capacity = %x\r\n", devId.Manufacture, devId.device, devId.capacity);
     /*  Update the metaimage in the Sflash using choosen device peripheral. */
-    // if(metaimageUpdate == 1)
-    // {
-    //      retVal = SBL_imageFlasher(qspiFlashHandle, (flashAddr + (uint32_t)SBL_METAIMAGE_OFFSET));
-    //     // if(retVal != 0)
-    //     // {
-    //     //     SBL_printf("\r\nError: Could not download the image to Flash. Resetting the board to retry\r\n");
-    //     //     /* Reset the MSS core */
-    //     //     SOC_softReset(gSblMCB.socHandle, &retVal);
-    //     // }
-    // }
+    if(select_mode == 3)
+    {
+        retVal = SBL_imageFlasher(qspiFlashHandle, (flashAddr + (uint32_t)SBL_BACKUP_IMAGE_OFFSET));
+        if(retVal != 0)
+        {
+            SBL_printf("\r\nError: Could not download the image to Flash. Resetting the board to retry\r\n");
+            /* Reset the MSS core */
+            SOC_softReset(gSblMCB.socHandle, &retVal);
+        }
+    }
     /* Download the metaimage present in the SFLASH into the RAM */
     if( select_mode == 2 )
     {
@@ -618,7 +628,8 @@ void SBL_init(void)
       /* Configure the divide value for MCAN source clock */
     SOC_setPeripheralClock(gSblMCB.socHandle, SOC_MODULE_MCAN, SOC_CLKSOURCE_VCLK, 4U, &errCode);  //4U 200MHz,  2U 120MHz, 0U 40MHz
 
-   
+    /* Initialize peripheral memory */
+    SOC_initPeripheralRam(gSblMCB.socHandle, SOC_MODULE_MCAN, &errCode);
 
     /* Configure the MPU for MSS regions, DSS regions and peripherals after calling SOC init.
      * BSS regions will be configured when BSS image is downloaded.
